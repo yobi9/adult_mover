@@ -154,6 +154,19 @@ test("copyFolder maps EACCES to permission message", async () => {
   });
 });
 
+test("copyFolder maps EPERM (Windows ACL deny) to permission message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("EPERM", "operation not permitted"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /لا توجد صلاحية/);
+  });
+});
+
 test("copyFolder maps ENOENT to not-found message", async () => {
   await withTempDir(async (dir) => {
     const src = path.join(dir, "src", "Movie A");

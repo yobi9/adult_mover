@@ -143,6 +143,7 @@ function copyErrorDetail(error: unknown, target: string): string {
   const msg = errorMessage(error);
   switch (code) {
     case "EACCES":
+    case "EPERM":
       return `فشل النسخ: لا توجد صلاحية كتابة على الوجهة — ${target} (${msg})`;
     case "ENOENT":
       return `فشل النسخ: المصدر أو الوجهة غير موجودة — ${target} (${msg})`;

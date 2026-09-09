@@ -505,7 +505,8 @@ export async function runExecutePhase(options: ExecutePhaseOptions): Promise<Exe
       } else {
         tracker.incErrors();
         markDecision(item.originalPath, { outcome: "ERROR", reason: outcome.reason, details: outcome.detail });
-        logger.error(`[${folderName}] فشل النسخ: ${outcome.detail ?? outcome.reason}`);
+        const detailMsg = outcome.detail?.replace(/^فشل النسخ:\s*/, "") ?? outcome.reason;
+        logger.error(`[${folderName}] فشل النسخ: ${detailMsg}`);
         errors.push({ item, reason: outcome.reason });
       }
     }
