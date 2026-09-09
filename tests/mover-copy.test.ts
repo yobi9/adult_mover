@@ -4,6 +4,7 @@ import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { copyFolder, verifyCopy, pathExists } from "../source/core/files/mover";
+import { Logger } from "../source/core/logging/logger";
 
 async function withTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = await fsp.mkdtemp(path.join(tmpdir(), "amm-copy-"));
@@ -131,5 +132,106 @@ test("copyFolder leaves source even after successful copy (no delete)", async ()
     assert.equal(out.ok, true);
     assert.equal(await pathExists(src), true);
     assert.equal(await pathExists(path.join(src, "film.mp4")), true);
+  });
+});
+
+function codedError(code: string, message: string): NodeJS.ErrnoException {
+  const e = new Error(message) as NodeJS.ErrnoException;
+  e.code = code;
+  return e;
+}
+
+test("copyFolder maps EACCES to permission message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("EACCES", "permission denied"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /لا توجد صلاحية/);
+  });
+});
+
+test("copyFolder maps ENOENT to not-found message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("ENOENT", "no such file"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /غير موجودة/);
+  });
+});
+
+test("copyFolder maps ENAMETOOLONG to path-too-long message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("ENAMETOOLONG", "name too long"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /طويل جداً/);
+  });
+});
+
+test("copyFolder maps ENOSPC to no-space message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("ENOSPC", "no space left"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /مساحة كافية/);
+  });
+});
+
+test("copyFolder maps unknown code with code in message", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "x");
+    const out = await copyFolder(src, path.join(dir, "dest"), "Movie A", {
+      cp: async () => { throw codedError("EBUSY", "resource busy"); },
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /EBUSY/);
+  });
+});
+
+test("copyFolder logs sizes on verify failure and detects empty dest", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "hello world");
+    const dest = path.join(dir, "dest");
+    const logger = new Logger(100);
+    const out = await copyFolder(src, dest, "Movie A", {
+      cp: async (_s, t) => { await fsp.mkdir(t, { recursive: true }); /* create empty dest */ },
+      logger,
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) assert.match(out.detail ?? "", /الوجهة فارغة|فشل التحقق/);
+    const hasLog = logger.entries.some((e) => e.message.includes("srcSize") && e.message.includes("dstSize"));
+    assert.equal(hasLog, true);
+  });
+});
+
+test("verifyCopy returns false when dest empty but src has content", async () => {
+  await withTempDir(async (dir) => {
+    const src = path.join(dir, "src", "Movie A");
+    await fsp.mkdir(src, { recursive: true });
+    await fsp.writeFile(path.join(src, "film.mp4"), "content");
+    const dst = path.join(dir, "dst", "Movie A");
+    await fsp.mkdir(dst, { recursive: true });
+    // dst empty
+    assert.equal(await verifyCopy(src, dst), false);
   });
 });

@@ -495,6 +495,7 @@ export async function runExecutePhase(options: ExecutePhaseOptions): Promise<Exe
     } else {
       const outcome = await copyFolder(item.originalPath, destination, folderName, {
         isStopping: stop.stopRequested,
+        logger,
       });
       if (outcome.ok) {
         tracker.incMoved();

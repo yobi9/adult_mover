@@ -11,6 +11,7 @@
 import { promises as fsp } from "node:fs";
 import path from "node:path";
 import { isUnsafeSourceDestination } from "./path-guard";
+import type { Logger } from "../logging/logger";
 
 /** أسباب رفض النقل. */
 export type MoveFailReason =
@@ -88,6 +89,8 @@ export interface CopyFolderOptions {
   /** دالة نسخ (افتراضياً fs.promises.cp). */
   cp?: (source: string, destination: string, options: { recursive: boolean }) => Promise<void>;
   isStopping?: () => boolean;
+  /** مسجل لتوثيق فشل التحقق (اختياري). */
+  logger?: Logger;
 }
 
 /** نتيجة محاولة النسخ. */
@@ -119,14 +122,37 @@ async function dirSize(target: string): Promise<number> {
 
 /**
  * تحقق سريع للنسخة: مقارنة الحجم الإجمالي.
+ * يعتبر srcSize>0 و dstSize===0 فشلاً صريحاً (وليس مجلداً فارغاً).
  * @returns true إذا تطابق الحجم.
  */
 export async function verifyCopy(source: string, copied: string): Promise<boolean> {
   try {
     const [srcSize, dstSize] = await Promise.all([dirSize(source), dirSize(copied)]);
+    if (srcSize > 0 && dstSize === 0) return false;
     return srcSize === dstSize;
   } catch {
     return false;
+  }
+}
+
+/**
+ * تحويل خطأ نظامي في النسخ إلى رسالة عربية واضحة.
+ */
+function copyErrorDetail(error: unknown, target: string): string {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  const msg = errorMessage(error);
+  switch (code) {
+    case "EACCES":
+      return `فشل النسخ: لا توجد صلاحية كتابة على الوجهة — ${target} (${msg})`;
+    case "ENOENT":
+      return `فشل النسخ: المصدر أو الوجهة غير موجودة — ${target} (${msg})`;
+    case "ENAMETOOLONG":
+      return `فشل النسخ: المسار طويل جداً — ${target} (${msg})`;
+    case "ENOSPC":
+      return `فشل النسخ: لا توجد مساحة كافية على القرص — ${target} (${msg})`;
+    default:
+      if (code) return `فشل النسخ: خطأ نظامي ${code} — ${target} (${msg})`;
+      return `فشل النسخ: ${msg} → ${target}`;
   }
 }
 
@@ -180,12 +206,25 @@ export async function copyFolder(
   try {
     await cp(source, target, { recursive: true });
   } catch (error) {
-    return { ok: false, reason: "io-error", detail: `${errorMessage(error)} → ${target}` };
+    return { ok: false, reason: "io-error", detail: copyErrorDetail(error, target) };
   }
 
   const verified = await verifyCopy(source, target);
   if (!verified) {
-    return { ok: false, reason: "io-error", detail: `فشل التحقق من النسخة: ${target}` };
+    // تسجيل الأحجام للتشخيص
+    let srcSize = -1;
+    let dstSize = -1;
+    try {
+      [srcSize, dstSize] = await Promise.all([dirSize(source), dirSize(target)]);
+    } catch {}
+    options.logger?.error(
+      `فشل التحقق من النسخة: srcSize=${srcSize} dstSize=${dstSize} — المصدر: ${source} → الوجهة: ${target}`
+    );
+    // حالة src ممتلئ و dest فارغ → رسالة أدق
+    if (srcSize > 0 && dstSize === 0) {
+      return { ok: false, reason: "io-error", detail: `فشل النسخ: اكتملت عملية النسخ لكن الوجهة فارغة (src=${srcSize} dst=${dstSize}) — ${target}` };
+    }
+    return { ok: false, reason: "io-error", detail: `فشل التحقق من النسخة: src=${srcSize} dst=${dstSize} — ${target}` };
   }
 
   return { ok: true, copiedTo: target };
