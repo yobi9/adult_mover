@@ -356,10 +356,21 @@ export class JobController {
   async executePending(mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number }> {
     if (!this.pendingStore) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["no store"], executed: 0 };
     if (this.running) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["running"], executed: 0 };
-    let items = await this.pendingStore.load();
+    let items: PendingAdultItem[] = [];
+    // إذا طُلب تنفيذ بدون ids وكان Pending فارغاً، استخدم نتيجة آخر فحص مباشرة (القرار الفوري بعد Scan)
+    const pendingLoaded = await this.pendingStore.load();
     if (ids && ids.length > 0) {
       const set = new Set(ids);
-      items = items.filter((it) => set.has(it.id));
+      items = pendingLoaded.filter((it) => set.has(it.id));
+      // إذا لم يوجد في Pending، ابحث في lastScanResult (حالة: المستخدم ضغط نقل/نسخ فوراً بعد الفحص)
+      if (items.length === 0 && this.lastScanResult) {
+        items = this.lastScanResult.knownAdult.filter((it) => set.has(it.id));
+      }
+    } else {
+      items = pendingLoaded;
+      if (items.length === 0 && this.lastScanResult && this.lastScanResult.knownAdult.length > 0) {
+        items = this.lastScanResult.knownAdult;
+      }
     }
     if (items.length === 0) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["empty"], executed: 0 };
 
@@ -384,10 +395,15 @@ export class JobController {
     });
 
     const result = await runner;
-    // إزالة الناجح من Pending
+    // إزالة الناجح من Pending (إن كان فيه)
     const succeededIds = new Set(result.executed.map((e) => e.item.id));
     for (const id of succeededIds) {
       await this.pendingStore.remove(id);
+    }
+    // إذا كان التنفيذ من lastScanResult مباشرة (Pending كان فارغاً)، امسح نتيجة الفحص لمنع إعادة التنفيذ
+    const wasFallback = pendingLoaded.length === 0 && this.lastScanResult !== null;
+    if (wasFallback && result.executed.length > 0) {
+      this.lastScanResult = null;
     }
     // تسجيل Copied
     if (mode === "copy" && this.copiedStore) {

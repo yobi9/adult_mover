@@ -1,5 +1,10 @@
 # سجل التغييرات (Changelog)
 
+## 0.2.1 — 2026-09-09 (Hotfix — Scan-First Execute)
+
+### إصلاح
+- **فشل النسخ: empty** — بعد "انتهى الفحص — بانتظار القرار" كان زر **نقل/نسخ** يقرأ من `pending.json` الفارغ بدل نتيجة الفحص الحية. الآن `executePending` يعود تلقائياً إلى `lastScanResult.knownAdult` عند فراغ Pending، ويمسح النتيجة بعد التنفيذ لمنع التكرار.
+
 ## 0.2.0 — 2026-09-09 (Scan-First Architecture)
 
 ### الجديد
