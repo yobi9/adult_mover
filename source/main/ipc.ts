@@ -65,6 +65,10 @@ function sanitizeSavePayload(raw: unknown): SaveSettingsPayload | null {
   return payload;
 }
 
+function isUuid(value: unknown): boolean {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 /** تسجيل كل قنوات IPC المتاحة. */
 export function registerIpcHandlers(controller: JobController): void {
   ipcMain.handle(IpcChannels.probe, (event): AppInfo => {
@@ -112,5 +116,79 @@ export function registerIpcHandlers(controller: JobController): void {
       throw new Error("Untrusted IPC caller");
     }
     controller.requestStop();
+  });
+
+  // Scan-First
+  ipcMain.handle(IpcChannels.scanStart, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.startScan();
+  });
+
+  ipcMain.handle(IpcChannels.scanSummary, (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.getScanSummary();
+  });
+
+  // Unknown
+  ipcMain.handle(IpcChannels.unknownList, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.getUnknown();
+  });
+  ipcMain.handle(IpcChannels.unknownClearOne, async (event, raw: unknown) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    const id = (raw as Record<string, unknown>)?.id;
+    if (!isUuid(id)) return { ok: false };
+    return controller.clearUnknown(id as string);
+  });
+  ipcMain.handle(IpcChannels.unknownClearAll, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.clearAllUnknown();
+  });
+
+  // Pending
+  ipcMain.handle(IpcChannels.pendingList, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.getPending();
+  });
+  ipcMain.handle(IpcChannels.pendingSaveAll, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.saveAsPending();
+  });
+  ipcMain.handle(IpcChannels.pendingExecute, async (event, raw: unknown) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    const rec = raw as Record<string, unknown>;
+    const mode = rec?.mode;
+    const ids = rec?.ids;
+    if (mode !== "move" && mode !== "copy") return { ok: false, error: "invalid mode" };
+    if (ids !== undefined && (!Array.isArray(ids) || !ids.every(isUuid))) {
+      return { ok: false, error: "invalid ids" };
+    }
+    return controller.executePending(mode as "move" | "copy", ids as string[] | undefined);
+  });
+  ipcMain.handle(IpcChannels.pendingClearOne, async (event, raw: unknown) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    const id = (raw as Record<string, unknown>)?.id;
+    if (!isUuid(id)) return { ok: false };
+    return controller.clearPending(id as string);
+  });
+  ipcMain.handle(IpcChannels.pendingClearAll, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.clearAllPending();
+  });
+
+  // Copied
+  ipcMain.handle(IpcChannels.copiedList, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.getCopied();
+  });
+  ipcMain.handle(IpcChannels.copiedDeleteOne, async (event, raw: unknown) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    const id = (raw as Record<string, unknown>)?.id;
+    if (!isUuid(id)) return { ok: false, error: "invalid id" };
+    return controller.deleteCopied(id as string);
+  });
+  ipcMain.handle(IpcChannels.copiedDeleteAll, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC caller");
+    return controller.deleteAllCopied();
   });
 }

@@ -1,5 +1,5 @@
 /**
- * منطق الواجهة الكامل (Renderer).
+ * منطق الواجهة الكامل (Renderer) — Scan-First.
  * يتواصل مع Main عبر جسر IPC الآمن فقط؛ بلا أي صلاحيات Node.js.
  */
 
@@ -12,7 +12,9 @@ const PHASE_LABELS: Record<JobPhase, string> = {
   scanning: "فحص المصادر…",
   parsing: "تحليل الأسماء…",
   searching: "الاستعلام عن التصنيفات…",
+  "scan-complete": "انتهى الفحص — بانتظار القرار",
   moving: "نقل المحتوى…",
+  copying: "نسخ المحتوى…",
   stopping: "إيقاف آمن…",
   stopped: "متوقف",
   complete: "مكتمل",
@@ -25,6 +27,7 @@ const RUNNING_PHASES: ReadonlySet<JobPhase> = new Set([
   "parsing",
   "searching",
   "moving",
+  "copying",
   "stopping",
 ]);
 
@@ -119,7 +122,7 @@ function setPhase(phase: JobPhase): void {
   el<HTMLSpanElement>("job-phase-label").textContent = PHASE_LABELS[phase] ?? phase;
   running = RUNNING_PHASES.has(phase);
   setBadge(
-    running ? "running" : phase === "complete" ? "complete" : phase === "aborted" || phase === "stopped" ? "stopped" : "idle",
+    running ? "running" : phase === "complete" ? "complete" : phase === "scan-complete" ? "complete" : phase === "aborted" || phase === "stopped" ? "stopped" : "idle",
     running ? "قيد التشغيل" : PHASE_LABELS[phase] ?? phase
   );
   syncControlState();
@@ -143,6 +146,158 @@ function syncControlState(): void {
   el<HTMLButtonElement>("toggle-key-btn").disabled = disabled;
   el<HTMLButtonElement>("start-btn").disabled = disabled;
   el<HTMLButtonElement>("stop-btn").disabled = !disabled;
+}
+
+/* ------------------------------ تبويبات ------------------------------ */
+
+function switchTab(tab: string): void {
+  document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  document.querySelectorAll<HTMLElement>(".tab-panel").forEach((p) => {
+    p.classList.toggle("active", p.dataset.panel === tab);
+  });
+  if (tab === "pending") void refreshPending();
+  if (tab === "unknown") void refreshUnknown();
+  if (tab === "copied") void refreshCopied();
+}
+
+async function refreshPending(): Promise<void> {
+  try {
+    const items = await window.adultMover.getPending();
+    const list = el<HTMLUListElement>("pending-list");
+    const empty = el<HTMLParagraphElement>("pending-empty");
+    const count = el<HTMLSpanElement>("pending-count");
+    count.textContent = String(items.length);
+    list.replaceChildren();
+    empty.hidden = items.length > 0;
+    items.forEach((it) => {
+      const li = document.createElement("li");
+      li.className = "item-row";
+      const label = document.createElement("span");
+      label.textContent = `${it.folderName} — ${it.rating} — ${it.originalPath}`;
+      const actions = document.createElement("span");
+      actions.className = "item-actions";
+      const moveBtn = document.createElement("button");
+      moveBtn.textContent = "نقل";
+      moveBtn.className = "btn small";
+      moveBtn.addEventListener("click", () => void executePendingConfirm("move", [it.id]));
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = "نسخ";
+      copyBtn.className = "btn small";
+      copyBtn.addEventListener("click", () => void executePendingConfirm("copy", [it.id]));
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "✕";
+      delBtn.className = "btn small";
+      delBtn.addEventListener("click", () => void clearPendingConfirm(it.id));
+      actions.append(moveBtn, copyBtn, delBtn);
+      li.append(label, actions);
+      list.append(li);
+    });
+  } catch {}
+}
+
+async function refreshUnknown(): Promise<void> {
+  try {
+    const items = await window.adultMover.getUnknown();
+    const list = el<HTMLUListElement>("unknown-list");
+    const empty = el<HTMLParagraphElement>("unknown-empty");
+    const count = el<HTMLSpanElement>("unknown-count");
+    count.textContent = String(items.length);
+    list.replaceChildren();
+    empty.hidden = items.length > 0;
+    items.forEach((it) => {
+      const li = document.createElement("li");
+      li.className = "item-row";
+      const label = document.createElement("span");
+      label.textContent = `${it.folderName} — ${it.reason} — ${it.originalPath}`;
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "✕";
+      delBtn.className = "btn small";
+      delBtn.addEventListener("click", () => void clearUnknown(it.id));
+      li.append(label, delBtn);
+      list.append(li);
+    });
+  } catch {}
+}
+
+async function refreshCopied(): Promise<void> {
+  try {
+    const items = await window.adultMover.getCopied();
+    const list = el<HTMLUListElement>("copied-list");
+    const empty = el<HTMLParagraphElement>("copied-empty");
+    const count = el<HTMLSpanElement>("copied-count");
+    count.textContent = String(items.length);
+    list.replaceChildren();
+    empty.hidden = items.length > 0;
+    items.forEach((it) => {
+      const li = document.createElement("li");
+      li.className = "item-row";
+      const label = document.createElement("span");
+      label.textContent = `${it.folderName} → ${it.copiedPath}`;
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "حذف النسخة";
+      delBtn.className = "btn small";
+      delBtn.addEventListener("click", () => void deleteCopiedConfirm(it.id, it.folderName));
+      li.append(label, delBtn);
+      list.append(li);
+    });
+  } catch {}
+}
+
+async function clearUnknown(id: string): Promise<void> {
+  await window.adultMover.clearUnknown(id);
+  await refreshUnknown();
+}
+
+async function clearPendingConfirm(id: string): Promise<void> {
+  const ok = await showConfirm(`هل تريد إزالة "${id}" من قيد الانتظار؟`);
+  if (!ok) return;
+  await window.adultMover.clearPending(id);
+  await refreshPending();
+}
+
+async function executePendingConfirm(mode: "move" | "copy", ids: string[]): Promise<void> {
+  const verb = mode === "move" ? "نقل" : "نسخ";
+  const ok = await showConfirm(`هل تريد ${verb} ${ids.length} عنصر؟`);
+  if (!ok) return;
+  const res = await window.adultMover.executePending(mode, ids);
+  if (!res.ok) appendLog("error", `فشل التنفيذ: ${res.errors.join("; ")}`);
+  else appendLog("info", `تم ${verb} ${res.executed} عنصر`);
+  await refreshPending();
+  await refreshCopied();
+}
+
+/* ------------------------------ مودالات ------------------------------ */
+
+let confirmResolver: ((v: boolean) => void) | null = null;
+
+function showConfirm(message: string): Promise<boolean> {
+  const overlay = el<HTMLDivElement>("confirm-modal");
+  el<HTMLParagraphElement>("confirm-message").textContent = message;
+  overlay.hidden = false;
+  return new Promise<boolean>((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+
+function hideConfirm(): void {
+  el<HTMLDivElement>("confirm-modal").hidden = true;
+  if (confirmResolver) {
+    confirmResolver(false);
+    confirmResolver = null;
+  }
+}
+
+function showScanResult(summary: { knownAdultCount: number; unknownCount: number; totalScanned: number }): void {
+  const overlay = el<HTMLDivElement>("scan-result-modal");
+  el<HTMLParagraphElement>("scan-result-summary").textContent =
+    `تم العثور على ${summary.knownAdultCount} فيلم/مسلسل مصنفة كمحتوى للكبار من أصل ${summary.totalScanned} — غير معروف: ${summary.unknownCount}`;
+  overlay.hidden = false;
+}
+
+function hideScanResult(): void {
+  el<HTMLDivElement>("scan-result-modal").hidden = true;
 }
 
 /* ------------------------------ حفظ الإعدادات ------------------------------ */
@@ -204,11 +359,13 @@ async function toggleKeyVisibility(): Promise<void> {
   btn.textContent = show ? "إخفاء" : "إظهار";
 }
 
-async function startJob(): Promise<void> {
+async function startScan(): Promise<void> {
   el<HTMLDivElement>("start-error").textContent = "";
-  const result = await window.adultMover.startJob();
+  // استخدم startScan إن وجد، وإلا fallback إلى startJob (للتوافق)
+  const api = (window.adultMover as unknown as Record<string, () => Promise<{ ok: boolean; error?: string }>>);
+  const result = api.startScan ? await (window.adultMover as unknown as { startScan: () => Promise<{ ok: boolean; error?: string }> }).startScan() : await window.adultMover.startJob();
   if (!result.ok) {
-    el<HTMLDivElement>("start-error").textContent = result.error ?? "تعذر بدء الوظيفة.";
+    el<HTMLDivElement>("start-error").textContent = result.error ?? "تعذر بدء الفحص.";
     return;
   }
   setPhase("preparing");
@@ -228,6 +385,13 @@ function handleJobEvent(event: JobEvent): void {
     case "decision":
       appendDecision(event.folder, event.decision);
       break;
+    case "scan-complete": {
+      setPhase("scan-complete");
+      showScanResult(event.summary);
+      void refreshPending();
+      void refreshUnknown();
+      break;
+    }
     case "complete": {
       setStats(event.stats);
       setPhase(event.phase);
@@ -239,9 +403,19 @@ function handleJobEvent(event: JobEvent): void {
       if (event.stopped) {
         appendLog("warn", "تمت معالجة المجلد الحالي ثم أوقفت الوظيفة بأمان.");
       }
+      void refreshPending();
+      void refreshCopied();
+      void refreshUnknown();
       break;
     }
   }
+}
+
+async function deleteCopiedConfirm(id: string, name: string): Promise<void> {
+  const ok = await showConfirm(`هل تريد حذف النسخة "${name}" نهائياً؟`);
+  if (!ok) return;
+  await window.adultMover.deleteCopied(id);
+  await refreshCopied();
 }
 
 /* ------------------------------ الإقلاع ------------------------------ */
@@ -262,6 +436,9 @@ async function init(): Promise<void> {
   syncFromSettings();
   setPhase("ready");
   appendLog("info", "جاهز للبدء.");
+  void refreshPending();
+  void refreshUnknown();
+  void refreshCopied();
 
   window.adultMover.onJobEvent(handleJobEvent);
 
@@ -288,7 +465,7 @@ async function init(): Promise<void> {
       void persist({ keepApiKey: el<HTMLInputElement>("keep-key-check").checked });
     }
   });
-  el<HTMLButtonElement>("start-btn").addEventListener("click", () => void startJob());
+  el<HTMLButtonElement>("start-btn").addEventListener("click", () => void startScan());
   el<HTMLButtonElement>("stop-btn").addEventListener("click", () => {
     if (running) {
       void window.adultMover.stopJob();
@@ -298,6 +475,70 @@ async function init(): Promise<void> {
   el<HTMLButtonElement>("clear-log-btn").addEventListener("click", () => {
     el<HTMLDivElement>("log-area").replaceChildren();
     logLines = 0;
+  });
+
+  // تبويبات
+  document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab ?? "log"));
+  });
+
+  // مودال نتيجة الفحص
+  el<HTMLButtonElement>("scan-move-btn").addEventListener("click", async () => {
+    hideScanResult();
+    const ok = await showConfirm("هل تريد نقل العناصر المصنفة للكبار؟");
+    if (!ok) return;
+    const res = await window.adultMover.executePending("move");
+    if (!res.ok) appendLog("error", `فشل النقل: ${res.errors.join("; ")}`);
+    await refreshPending();
+    await refreshCopied();
+  });
+  el<HTMLButtonElement>("scan-copy-btn").addEventListener("click", async () => {
+    hideScanResult();
+    const ok = await showConfirm("هل تريد نسخ العناصر المصنفة للكبار؟");
+    if (!ok) return;
+    const res = await window.adultMover.executePending("copy");
+    if (!res.ok) appendLog("error", `فشل النسخ: ${res.errors.join("; ")}`);
+    await refreshPending();
+    await refreshCopied();
+  });
+  el<HTMLButtonElement>("scan-later-btn").addEventListener("click", async () => {
+    hideScanResult();
+    const res = await window.adultMover.saveAsPending();
+    appendLog("info", `تم حفظ ${res.saved} عنصر قيد الانتظار`);
+    await refreshPending();
+  });
+
+  // تأكيد عام
+  el<HTMLButtonElement>("confirm-cancel-btn").addEventListener("click", () => hideConfirm());
+  el<HTMLButtonElement>("confirm-ok-btn").addEventListener("click", () => {
+    const overlay = el<HTMLDivElement>("confirm-modal");
+    overlay.hidden = true;
+    if (confirmResolver) {
+      confirmResolver(true);
+      confirmResolver = null;
+    }
+  });
+
+  // تبويب قيد الانتظار أزرار عامة
+  el<HTMLButtonElement>("pending-move-all-btn").addEventListener("click", () => void executePendingConfirm("move", []));
+  el<HTMLButtonElement>("pending-copy-all-btn").addEventListener("click", () => void executePendingConfirm("copy", []));
+  el<HTMLButtonElement>("pending-clear-all-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("مسح كل قيد الانتظار؟");
+    if (!ok) return;
+    await window.adultMover.clearAllPending();
+    await refreshPending();
+  });
+  el<HTMLButtonElement>("unknown-clear-all-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("مسح كل غير المعروف؟");
+    if (!ok) return;
+    await window.adultMover.clearAllUnknown();
+    await refreshUnknown();
+  });
+  el<HTMLButtonElement>("copied-clear-all-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("حذف جميع النسخ نهائياً؟");
+    if (!ok) return;
+    await window.adultMover.deleteAllCopied();
+    await refreshCopied();
   });
 }
 

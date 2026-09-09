@@ -73,10 +73,18 @@
 
       <!-- التحكم -->
       <section class="card actions-card">
-        <button id="start-btn" class="btn primary big" type="button">ابدأ الفحص والنقل</button>
+        <button id="start-btn" class="btn primary big" type="button">بدء الفحص والتصنيف</button>
         <button id="stop-btn" class="btn danger big" type="button" disabled>إيقاف</button>
         <div id="start-error" class="error-text"></div>
       </section>
+
+      <!-- تبويبات -->
+      <nav class="tabs" aria-label="تبويبات">
+        <button class="tab-btn active" data-tab="log" type="button">السجل النشط</button>
+        <button class="tab-btn" data-tab="pending" type="button">قيد الانتظار <span id="pending-count" class="tab-count">0</span></button>
+        <button class="tab-btn" data-tab="unknown" type="button">غير المعروف <span id="unknown-count" class="tab-count">0</span></button>
+        <button class="tab-btn" data-tab="copied" type="button">المنسوخ <span id="copied-count" class="tab-count">0</span></button>
+      </nav>
 
       <!-- الإحصائيات -->
       <section class="card stats-card">
@@ -87,13 +95,71 @@
       </section>
 
       <!-- السجل -->
-      <section class="card">
+      <section class="card tab-panel active" data-panel="log">
         <div class="card-head">
           <h2>سجل العمليات</h2>
           <button id="clear-log-btn" class="btn small" type="button">مسح</button>
         </div>
         <div id="log-area" class="log-area" aria-live="polite"></div>
       </section>
+
+      <!-- قيد الانتظار -->
+      <section class="card tab-panel" data-panel="pending">
+        <div class="card-head">
+          <h2>قيد الانتظار</h2>
+          <div class="row" style="margin:0">
+            <button id="pending-move-all-btn" class="btn small" type="button">نقل الكل</button>
+            <button id="pending-copy-all-btn" class="btn small" type="button">نسخ الكل</button>
+            <button id="pending-clear-all-btn" class="btn small" type="button">مسح الكل</button>
+          </div>
+        </div>
+        <ul id="pending-list" class="item-list"></ul>
+        <p id="pending-empty" class="muted small">لا توجد عناصر قيد الانتظار.</p>
+      </section>
+
+      <!-- غير المعروف -->
+      <section class="card tab-panel" data-panel="unknown">
+        <div class="card-head">
+          <h2>غير المعروف</h2>
+          <button id="unknown-clear-all-btn" class="btn small" type="button">مسح الكل</button>
+        </div>
+        <ul id="unknown-list" class="item-list"></ul>
+        <p id="unknown-empty" class="muted small">لا توجد عناصر غير معروفة.</p>
+      </section>
+
+      <!-- المنسوخ -->
+      <section class="card tab-panel" data-panel="copied">
+        <div class="card-head">
+          <h2>المنسوخ</h2>
+          <button id="copied-clear-all-btn" class="btn small" type="button">حذف جميع النسخ</button>
+        </div>
+        <ul id="copied-list" class="item-list"></ul>
+        <p id="copied-empty" class="muted small">لا توجد نسخ.</p>
+      </section>
+
+    <!-- مودال نتيجة الفحص -->
+    <div id="scan-result-modal" class="modal-overlay" hidden>
+      <div class="modal-card">
+        <h3 id="scan-result-title">نتيجة الفحص</h3>
+        <p id="scan-result-summary" class="muted"></p>
+        <div class="modal-actions">
+          <button id="scan-move-btn" class="btn primary" type="button">نقل</button>
+          <button id="scan-copy-btn" class="btn" type="button">نسخ</button>
+          <button id="scan-later-btn" class="btn" type="button">لاحقاً</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- مودال تأكيد عام -->
+    <div id="confirm-modal" class="modal-overlay" hidden>
+      <div class="modal-card">
+        <p id="confirm-message"></p>
+        <div class="modal-actions">
+          <button id="confirm-cancel-btn" class="btn" type="button">إلغاء</button>
+          <button id="confirm-ok-btn" class="btn primary" type="button">تأكيد</button>
+        </div>
+      </div>
+    </div>
     </main>
 
     <footer class="footer muted small">

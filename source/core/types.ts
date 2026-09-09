@@ -49,7 +49,9 @@ export type JobPhase =
   | "scanning"
   | "parsing"
   | "searching"
+  | "scan-complete"
   | "moving"
+  | "copying"
   | "stopping"
   | "stopped"
   | "complete"
@@ -108,6 +110,14 @@ export interface ScanSummary {
   unknownCount: number;
   skippedCount: number;
   errorCount: number;
+}
+
+/** نتيجة مرحلة الفحص والتصنيف (Scan-First — لا يمس القرص). */
+export interface ScanResult {
+  summary: ScanSummary;
+  knownAdult: PendingAdultItem[];
+  unknown: UnknownItem[];
+  skippedNonAdult: number;
 }
 
 /** إعدادات التطبيق الكاملة المُحمَّلة/المحفوظة (البند 37-41). */

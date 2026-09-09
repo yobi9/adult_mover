@@ -13,6 +13,9 @@ import path from "node:path";
 import { registerIpcHandlers } from "./ipc";
 import { JobController } from "./job-controller";
 import { AppConfigStore } from "../core/config/store";
+import { UnknownStore } from "../core/config/unknown-store";
+import { PendingStore } from "../core/config/pending-store";
+import { CopiedStore } from "../core/config/copied-store";
 import { Logger } from "../core/logging/logger";
 import { IpcChannels, type JobLogEvent, type JobEvent } from "../core/ipc-contracts";
 
@@ -77,12 +80,16 @@ function createMainWindow(controller: JobController): BrowserWindow {
 
 app.whenReady().then(async () => {
   const logger = new Logger(2000);
-  const store = new AppConfigStore(path.join(app.getPath("userData"), "settings.json"));
+  const userData = app.getPath("userData");
+  const store = new AppConfigStore(path.join(userData, "settings.json"));
+  const unknownStore = new UnknownStore(path.join(userData, "unknown.json"));
+  const pendingStore = new PendingStore(path.join(userData, "pending.json"));
+  const copiedStore = new CopiedStore(path.join(userData, "copied.json"));
   const controller = new JobController(store, logger, (event: JobEvent) => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IpcChannels.jobEvent, event);
     }
-  });
+  }, unknownStore, pendingStore, copiedStore);
 
   // بثّ سطور السجل إلى الواجهة (رؤية لوج مباشر — البند 25).
   // الرسائل تُنقّى مسبقاً في Logger.log (إخفاء api_key) قبل الوصول إلى هنا.

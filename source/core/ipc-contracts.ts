@@ -3,7 +3,7 @@
  * نوعية فقط (Type-only)؛ لا تحتوي أي منطق.
  */
 
-import type { AppSettings, Decision, JobPhase, Stats } from "./types";
+import type { AppSettings, Decision, JobPhase, Stats, ScanSummary, PendingAdultItem, UnknownItem, CopiedItem } from "./types";
 import type { LogLevel } from "./logging/logger";
 
 /** معلومات النظام/التطبيق المرسلة عبر قناة app:probe. */
@@ -25,6 +25,23 @@ export const IpcChannels = {
   jobStart: "job:start",
   jobStop: "job:stop",
   jobEvent: "job:event",
+  // Scan-First
+  scanStart: "scan:start",
+  scanSummary: "scan:summary",
+  // Unknown
+  unknownList: "unknown:list",
+  unknownClearOne: "unknown:clearOne",
+  unknownClearAll: "unknown:clearAll",
+  // Pending
+  pendingList: "pending:list",
+  pendingSaveAll: "pending:saveAll",
+  pendingExecute: "pending:execute",
+  pendingClearOne: "pending:clearOne",
+  pendingClearAll: "pending:clearAll",
+  // Copied
+  copiedList: "copied:list",
+  copiedDeleteOne: "copied:deleteOne",
+  copiedDeleteAll: "copied:deleteAll",
 } as const;
 
 /** إقلاع نافذة اختيار مجلد. */
@@ -85,6 +102,14 @@ export interface JobCompleteEvent {
   stats: Stats;
 }
 
+/** انتهاء الفحص والتصنيف — بانتظار قرار (Scan-First). */
+export interface JobScanCompleteEvent {
+  type: "scan-complete";
+  summary: ScanSummary;
+  knownAdult: PendingAdultItem[];
+  unknown: UnknownItem[];
+}
+
 /** كل أحداث الوظيفة المرسلة من Main إلى الاجتماع عبر قناة job:event. */
 export type JobEvent =
   | JobLogEvent
@@ -92,7 +117,8 @@ export type JobEvent =
   | JobStatsEvent
   | JobDecisionEvent
   | JobScanSourceEvent
-  | JobCompleteEvent;
+  | JobCompleteEvent
+  | JobScanCompleteEvent;
 
 /** صيغة الإعدادات المقبولة عند الحفظ (جميع الحقول اختيارية). */
 export interface SaveSettingsPayload {
