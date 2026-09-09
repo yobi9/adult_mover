@@ -62,6 +62,54 @@ export interface JobConfig {
   readonly recursive: boolean;
 }
 
+/** عنصر غير معروف (Fail Closed — لا يُنقل/يُنسخ تلقائياً). */
+export interface UnknownItem {
+  id: string;
+  folderName: string;
+  originalPath: string;
+  reason: string;
+  details?: string;
+  date: string;
+  source: string;
+}
+
+/** عنصر مصنف كمحتوى للكبار بانتظار قرار (حالة "لاحقاً" المحفوظة). */
+export interface PendingAdultItem {
+  id: string;
+  folderName: string;
+  originalPath: string;
+  destination: string;
+  rating: string;
+  mediaType: MediaType;
+  tmdbId: number | null;
+  confidence: number;
+  year: number | null;
+  title: string;
+  dateScanned: string;
+  source: string;
+}
+
+/** سجل نسخة نُفذت فعلياً (Copy Mode). */
+export interface CopiedItem {
+  id: string;
+  folderName: string;
+  originalPath: string;
+  copiedPath: string;
+  destination: string;
+  date: string;
+  sizeBytes?: number;
+  pendingId?: string;
+}
+
+/** ملخص فحص وتصنيف (Phase A — لا يمس القرص). */
+export interface ScanSummary {
+  totalScanned: number;
+  knownAdultCount: number;
+  unknownCount: number;
+  skippedCount: number;
+  errorCount: number;
+}
+
 /** إعدادات التطبيق الكاملة المُحمَّلة/المحفوظة (البند 37-41). */
 export interface AppSettings {
   /** مجلدات المصادر. */

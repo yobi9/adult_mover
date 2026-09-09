@@ -83,6 +83,114 @@ export async function uniqueTargetPath(destination: string, name: string): Promi
   throw new Error("نطاق التسمية الفريدة استُنفد للاسم المطلوب.");
 }
 
+/** خيارات النسخ (قابلة للحقن للاختبار). */
+export interface CopyFolderOptions {
+  /** دالة نسخ (افتراضياً fs.promises.cp). */
+  cp?: (source: string, destination: string, options: { recursive: boolean }) => Promise<void>;
+  isStopping?: () => boolean;
+}
+
+/** نتيجة محاولة النسخ. */
+export type CopyOutcome =
+  | { ok: true; copiedTo: string }
+  | { ok: false; reason: MoveFailReason; detail?: string };
+
+/**
+ * حساب الحجم الإجمالي لمجلد (مجموع أحجام الملفات).
+ */
+async function dirSize(target: string): Promise<number> {
+  let total = 0;
+  const entries = await fsp.readdir(target, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      total += await dirSize(full);
+    } else if (entry.isFile()) {
+      try {
+        const st = await fsp.stat(full);
+        total += st.size;
+      } catch {
+        /* تجاهل ملف اختفى أثناء الحساب */
+      }
+    }
+  }
+  return total;
+}
+
+/**
+ * تحقق سريع للنسخة: مقارنة الحجم الإجمالي.
+ * @returns true إذا تطابق الحجم.
+ */
+export async function verifyCopy(source: string, copied: string): Promise<boolean> {
+  try {
+    const [srcSize, dstSize] = await Promise.all([dirSize(source), dirSize(copied)]);
+    return srcSize === dstSize;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * نسخ مجلد كامل بأمان (يبقي المصدر).
+ * @param source مسار مجلد المصدر.
+ * @param destination مجلد الوجهة.
+ * @param name اسم الوجهة.
+ */
+export async function copyFolder(
+  source: string,
+  destination: string,
+  name: string,
+  options: CopyFolderOptions = {}
+): Promise<CopyOutcome> {
+  const isStopping = options.isStopping ?? (() => false);
+
+  if (isStopping()) {
+    return { ok: false, reason: "aborted", detail: "تم طلب الإيقاف قبل بدء النسخ." };
+  }
+
+  if (!(await pathExists(source))) {
+    return { ok: false, reason: "source-missing", detail: source };
+  }
+  if (!(await isDirectory(source))) {
+    return { ok: false, reason: "source-not-dir", detail: source };
+  }
+
+  try {
+    await ensureDirectoryExists(destination);
+  } catch (error) {
+    return { ok: false, reason: "destination-unavailable", detail: errorMessage(error) };
+  }
+
+  if (isUnsafeSourceDestination(source, destination)) {
+    return { ok: false, reason: "unsafe-paths", detail: `${source} ↔ ${destination}` };
+  }
+
+  let target: string;
+  try {
+    target = await uniqueTargetPath(destination, name);
+  } catch (error) {
+    return { ok: false, reason: "io-error", detail: errorMessage(error) };
+  }
+
+  if (isStopping()) {
+    return { ok: false, reason: "aborted", detail: "تم طلب الإيقاف قبل بدء النسخ." };
+  }
+
+  const cp = options.cp ?? ((s: string, d: string, o: { recursive: boolean }) => fsp.cp(s, d, o));
+  try {
+    await cp(source, target, { recursive: true });
+  } catch (error) {
+    return { ok: false, reason: "io-error", detail: `${errorMessage(error)} → ${target}` };
+  }
+
+  const verified = await verifyCopy(source, target);
+  if (!verified) {
+    return { ok: false, reason: "io-error", detail: `فشل التحقق من النسخة: ${target}` };
+  }
+
+  return { ok: true, copiedTo: target };
+}
+
 /** هل الخطأ يشير إلى عبور بين مجلدات مختلفة (EXDEV)؟ */
 function isCrossDeviceError(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "EXDEV";
