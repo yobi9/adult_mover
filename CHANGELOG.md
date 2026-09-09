@@ -1,5 +1,22 @@
 # سجل التغييرات (Changelog)
 
+## 0.2.0 — 2026-09-09 (Scan-First Architecture)
+
+### الجديد
+- **Scan-First:** الفحص والتصنيف لا يمس القرص إطلاقاً — يجمع `Known Adult` و `Unknown` فقط، ثم يعرض مودال بثلاثة خيارات: **نقل / نسخ / لاحقاً**.
+- **Pending (قيد الانتظار):** حفظ `Known Adult` كحالة "لاحقاً" في `pending.json` (كتابة ذرية) وتنفيذها لاحقاً دون إعادة فحص — تبويب مستقل دائم.
+- **Unknown (غير المعروف):** تجميع `not-found/no-rating/low-confidence/tmdb-error` في `unknown.json` للمراجعة — Fail Closed.
+- **Copy Mode:** `copyFolder` + `verifyCopy` (مقارنة حجم) مع `uniqueTargetPath`، يبقي المصدر ويُسجل في `copied.json` — تبويب "المنسوخ" مع حذف آمن (`isPathInside`).
+- **IPC و UI:** 13 قناة جديدة (`scan:start/summary`, `unknown:*`, `pending:*`, `copied:*`) + واجهة Tabs (السجل/قيد الانتظار/غير المعروف/المنسوخ) + مودالي نتيجة وتأكيد.
+- **Pipeline:** فصل `runScanPhase` عن `runExecutePhase` مع الحفاظ على `runScanJob` القديم للتوافق.
+
+### البنية
+- 3 مخازن جديدة بنمط `AppConfigStore` (ذري): `unknown-store.ts`, `pending-store.ts`, `copied-store.ts`.
+- `JobPhase` أضيف لها `scan-complete` و `copying`.
+
+### الاختبارات
+- 153 اختبار وحدة (114 السابقة + 39 جديدة: 7 UnknownStore + 6 PendingStore + 7 CopiedStore + 9 mover-copy + 4 scan-phase + 4 execute-phase + 2 تكامل).
+
 ## 0.1.0 — 2026-09-09 (الإصدار الرسمي الأول)
 
 ### الإصلاحات
