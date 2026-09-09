@@ -132,4 +132,5 @@ source/
   renderer/        # واجهة RTL عربية (HTML/CSS/TS خام)
 scripts/           # أدوات بناء/أيقونة/بيانات تجريبية
 tests/             # اختبارات الوحدة (Node test runner + tsx)
-```
+``` 
+![Adult Media Mover Interface](screenshots/main_ui.png) 
