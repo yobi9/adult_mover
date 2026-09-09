@@ -281,7 +281,8 @@ export class JobController {
           );
         }
         this.sendEvent({ type: "scan-complete", summary: result.summary, knownAdult: result.knownAdult, unknown: result.unknown } as JobEvent);
-        this.sendEvent({ type: "phase", phase: result.phase });
+        // إيقاف المستخدم ليس خطأً حرجاً: بعث stopped بدل aborted لكي لا تظهر شارة "خطأ حرج"
+        this.sendEvent({ type: "phase", phase: result.stopped ? "stopped" : result.phase });
         // stats نهائية للفحص
         this.sendEvent({ type: "stats", stats: result.stats });
       })
@@ -353,9 +354,9 @@ export class JobController {
     return { cleared: before.length };
   }
 
-  async executePending(mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number }> {
-    if (!this.pendingStore) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["no store"], executed: 0 };
-    if (this.running) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["running"], executed: 0 };
+  async executePending(mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number; stopped: boolean }> {
+    if (!this.pendingStore) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["تعذر الوصول إلى مخزن قيد الانتظار"], executed: 0, stopped: false };
+    if (this.running) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["توجد عملية قيد التشغيل حالياً"], executed: 0, stopped: false };
     let items: PendingAdultItem[] = [];
     // إذا طُلب تنفيذ بدون ids وكان Pending فارغاً، استخدم نتيجة آخر فحص مباشرة (القرار الفوري بعد Scan)
     const pendingLoaded = await this.pendingStore.load();
@@ -372,7 +373,7 @@ export class JobController {
         items = this.lastScanResult.knownAdult;
       }
     }
-    if (items.length === 0) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["empty"], executed: 0 };
+    if (items.length === 0) return { ok: false, stats: { processed: 0, moved: 0, skipped: 0, errors: 0 }, errors: ["لا توجد عناصر قيد الانتظار للتنفيذ — أعد الفحص أو اختر من نتيجة الفحص الحالية"], executed: 0, stopped: false };
 
     this.stop.reset();
     this.running = true;
@@ -430,6 +431,7 @@ export class JobController {
       stats: result.stats,
       errors: result.errors.map((e) => `${e.item.folderName}: ${e.reason}`),
       executed: result.executed.length,
+      stopped: result.stopped,
     };
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "adult-media-mover",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "ناقل الأفلام والمسلسلات للكبار فقط - Adult Media Mover",
   "main": "dist/main/main.js",
   "private": true,

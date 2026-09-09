@@ -72,7 +72,7 @@ const bridge = {
   clearAllUnknown: (): Promise<{ cleared: number }> => ipcRenderer.invoke(CHANNELS.unknownClearAll),
   getPending: (): Promise<PendingAdultItem[]> => ipcRenderer.invoke(CHANNELS.pendingList),
   saveAsPending: (): Promise<{ saved: number }> => ipcRenderer.invoke(CHANNELS.pendingSaveAll),
-  executePending: (mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number }> =>
+  executePending: (mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number; stopped: boolean }> =>
     ipcRenderer.invoke(CHANNELS.pendingExecute, { mode, ids }),
   clearPending: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(CHANNELS.pendingClearOne, { id }),
   clearAllPending: (): Promise<{ cleared: number }> => ipcRenderer.invoke(CHANNELS.pendingClearAll),

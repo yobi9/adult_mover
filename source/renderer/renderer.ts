@@ -16,7 +16,7 @@ const PHASE_LABELS: Record<JobPhase, string> = {
   moving: "نقل المحتوى…",
   copying: "نسخ المحتوى…",
   stopping: "إيقاف آمن…",
-  stopped: "متوقف",
+  stopped: "متوقف (بناءً على طلبك)",
   complete: "مكتمل",
   aborted: "متوقف (خطأ حرج)",
 };
@@ -262,8 +262,8 @@ async function executePendingConfirm(mode: "move" | "copy", ids: string[]): Prom
   const ok = await showConfirm(`هل تريد ${verb} ${ids.length} عنصر؟`);
   if (!ok) return;
   const res = await window.adultMover.executePending(mode, ids);
-  if (!res.ok) appendLog("error", `فشل التنفيذ: ${res.errors.join("; ")}`);
-  else appendLog("info", `تم ${verb} ${res.executed} عنصر`);
+  if (res.ok) appendLog("info", `تم ${verb} ${res.executed} عنصر`);
+  else if (!res.stopped) appendLog("error", `فشل التنفيذ: ${res.errors.join("; ")}`);
   await refreshPending();
   await refreshCopied();
 }
@@ -394,7 +394,9 @@ function handleJobEvent(event: JobEvent): void {
     }
     case "complete": {
       setStats(event.stats);
-      setPhase(event.phase);
+      // لا تخلط بين الإيقاف المتعمد (stopped) والخطأ الحرج (aborted):
+      // الشارة تُشتق من stopped دوماً — phase لوحدها مشتركة بين الحالتين.
+      setPhase(event.stopped ? "stopped" : event.phase);
       const how = event.stopped ? "أُوقفت الوظيفة بناءً على طلبك" : event.phase === "complete" ? "اكتملت الوظيفة" : "توقفت الوظيفة بسبب خطأ حرج";
       appendLog(
         event.phase === "complete" ? "info" : "warn",
@@ -488,7 +490,7 @@ async function init(): Promise<void> {
     const ok = await showConfirm("هل تريد نقل العناصر المصنفة للكبار؟");
     if (!ok) return;
     const res = await window.adultMover.executePending("move");
-    if (!res.ok) appendLog("error", `فشل النقل: ${res.errors.join("; ")}`);
+    if (!res.ok && !res.stopped) appendLog("error", `فشل النقل: ${res.errors.join("; ")}`);
     await refreshPending();
     await refreshCopied();
   });
@@ -497,7 +499,7 @@ async function init(): Promise<void> {
     const ok = await showConfirm("هل تريد نسخ العناصر المصنفة للكبار؟");
     if (!ok) return;
     const res = await window.adultMover.executePending("copy");
-    if (!res.ok) appendLog("error", `فشل النسخ: ${res.errors.join("; ")}`);
+    if (!res.ok && !res.stopped) appendLog("error", `فشل النسخ: ${res.errors.join("; ")}`);
     await refreshPending();
     await refreshCopied();
   });

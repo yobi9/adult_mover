@@ -29,7 +29,7 @@ declare global {
       clearAllUnknown(): Promise<{ cleared: number }>;
       getPending(): Promise<PendingAdultItem[]>;
       saveAsPending(): Promise<{ saved: number }>;
-      executePending(mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number }>;
+      executePending(mode: "move" | "copy", ids?: string[]): Promise<{ ok: boolean; stats: Stats; errors: string[]; executed: number; stopped: boolean }>;
       clearPending(id: string): Promise<{ ok: boolean }>;
       clearAllPending(): Promise<{ cleared: number }>;
       getCopied(): Promise<CopiedItem[]>;
