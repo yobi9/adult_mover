@@ -80,7 +80,8 @@ adult_mover/
 │   ├── main/                    # عملية Electron الرئيسية (Main Process)
 │   │   ├── main.ts              # إنشاء النافذة، دورة حياة التطبيق
 │   │   ├── preload.ts           # جسر IPC آمن (contextBridge)
-│   │   └── ipc.ts               # تسجيل قنوات IPC
+│   │   ├── ipc.ts               # تسجيل قنوات IPC
+│   │   └── job-controller.ts    # المتحكم المركزي (إعدادات + مخازن + إيقاف)
 │   │
 │   ├── core/                    # منطق خالص (لا يعتمد على Electron = قابل للاختبار)
 │   │   ├── media-parser/        # استخراج الاسم/السنة/النوع من اسم المجلد
@@ -104,17 +105,21 @@ adult_mover/
 │   │   │   ├── decision.ts      # أنواع القرار MOVE|SKIP|ERROR + الأسباب
 │   │   │   ├── stop.ts          # آلية الإيقاف الآمن
 │   │   │   └── stats.ts         # الإحصائيات
-│   │   ├── config/              # حفظ الإعدادات غير الحساسة (اختياري)
-│   │   │   └── store.ts
+│   │   ├── config/              # حفظ الإعدادات + مخازن Scan-First (كتابة ذرية tmp→rename)
+│   │   │   ├── store.ts         # الإعدادات غير الحساسة (%APPDATA%/settings.json)
+│   │   │   ├── unknown-store.ts # عناصر غير المعروف (unknown.json)
+│   │   │   ├── pending-store.ts # عناصر قيد الانتظار «لاحقاً» (pending.json)
+│   │   │   └── copied-store.ts  # سجل النسخ المنفذة (copied.json)
 │   │   ├── logging/             # السجل: حلقة داخلية في الذاكرة + ملف اختياري
 │   │   │   └── logger.ts
-│   │   └── types.ts             # أنواع مشتركة
+│   │   ├── types.ts             # أنواع مشتركة
+│   │   └── ipc-contracts.ts     # عقود + قائمة بيضاء لقنوات IPC
 │   │
 │   └── renderer/                # الواجهة (عملية Chromium)
 │       ├── index.html
 │       ├── styles.css
-│       ├── renderer.ts          # منطق الواجهة
-│       └── i18n.ts              # نصوص عربية/إنجليزية
+│       ├── renderer.ts          # منطق الواجهة (Scan-First)
+│       └── global.d.ts          # تعريف window.adultMover
 │
 ├── tests/                       # اختبارات node:test (تعمل دون Electron)
 │   ├── media-parser.test.ts
@@ -139,10 +144,13 @@ adult_mover/
 ├── tsconfig.test.json           # typecheck للاختبارات أيضاً
 ├── electron-builder.yml         # إعداد Installer/Portable
 ├── .gitignore
-├── README.md                    # يُكتب في مرحلة لاحقة
+├── README.md                    # دليل الاستخدام والتطوير
+├── USER_GUIDE.md                # دليل المستخدم النهائي
+├── CHANGELOG.md                 # سجل الإصدارات
 ├── Architecture.md
 ├── ImplementationPlan.md
-└── Requirements.md
+├── .github/workflows/           # CI: typecheck + tests + بناء/نشر Releases
+└── doc/Requirements.md          # متطلبات المشروع الأصلية
 ```
 
 ---
@@ -157,7 +165,9 @@ adult_mover/
 | **SearchRanking** | حساب درجة الثقة بين الاسم المطلوب ونتائج TMDB (تطابق الاسم، السنة، التشابه النصي، ترتيب TMDB). |
 | **MediaRating** (المركزية) | `getMediaRating(name, year, apiKey)` → `{ rating, mediaType, tmdbId, confidence, state }`. **TV أولاً ثم Movie** بحسب البند 17-19. |
 | **FileManager** | Scanner (اكتشاف مجلد المحتوى) + PathGuard (حماية التداخل) + Mover (نقل آمن، تسمية فريدة، فحوصات قبل النقل؛ Same-Volume تلقائي، Cross-Volume مُرفض بلا تأكيد صريح). |
-| **Orchestrator** | حلقة متسلسلة لكل مجلد؛ يدير Stop/Stats، ويستدعي المراحل ويحوّل القرارات إلى Log. |
+| **Orchestrator** | حلقة متسلسلة لكل مجلد؛ يدير Stop/Stats، ويستدعي المراحل ويحوّل القرارات إلى Log. يوفر 3 مداخل: `runScanJob` (تدفق 0.1.0 القديم للتوافق)، `runScanPhase` (الفحص والتصنيف فقط — لا يمس القرص)، `runExecutePhase` (التنفيذ نقل/نسخ لعناصر معلقة). |
+| **JobController** (Main) | يملك الإعدادات + إشارة الإيقاف + حالة التشغيل، يبني عميل TMDB وبوابة التصنيف، يحوّل `lastScanResult`، ويسهّل مخازن Unknown/Pending/Copied أمام قنوات IPC. |
+| **UnknownStore / PendingStore / CopiedStore** | مخازن JSON في `%APPDATA%` بكتابة ذرية (`tmp → rename`) وتحمل متسامح: عناصر غير المعروف، قيد الانتظار («لاحقاً»)، وسجل النسخ المنفذة — لكلٍّ Schema version وUUID. |
 | **StopController** | طلب الإيقاف → أكمل المجلد الحالي → ألغِ الجدولة بعدها. |
 | **ConfigStore** | حفظ اختياري للإعدادات غير الحساسة (آخر المصادر، الوجهة، تفضيلات الواجهة). المفتاح لا يُحفظ إلا بموافقة صريحة (خانة اختيار). |
 | **Logger** | حلقة دائرية في الذاكرة للعرض الفوري + ملف اختياري (متناوب)؛ مفتاح API ممنوع من كل أنواع التسجيل. |
@@ -168,10 +178,12 @@ adult_mover/
 ## 5. طريقة عمل الواجهة (UI Architecture)
 
 - **فصل صارم**: Renderer → (IPC عبر contextBridge) → Main Process → Core.
-- Renderer يملك فقط: قائمة المصادر، حقل الوجهة، حقل المفتاح (مُخفى `type=password`)، أزرار (إضافة/حذف المحدد/حذف الكل/استعراض/بدء/إيقاف)، حالة التشغيل، إحصائيات، Log فوري، وخانة «فحص متكرر».
-- Main Process يرسل أحداثاً دفعية (push) للـ Renderer: `log`, `status`, `stats`, `jobDone`, `jobAborted`, `summary`. الـ Renderer يحدّث فقط. هذا يضمن عدم التجميد.
+- Renderer يملك فقط: قائمة المصادر، حقل الوجهة، حقل المفتاح (مُخفى `type=password`)، أزرار (إضافة/حذف المحدد/حذف الكل/استعراض/بدء الفحص/إيقاف)، حالة التشغيل، إحصائيات، Log فوري، وخانة «فحص متكرر».
+- **تبويبات (Tabs)**: «السجل النشط» + «قيد الانتظار» (مع أزرار نقل/نسخ لكل عنصر أو للكل) + «غير المعروف» + «المنسوخ». العدادات (Pending/Unknown/Copied) تحدَّث حياً.
+- **مودال نتيجة الفحص** (بعد `scan-complete`): يعرض «تم العثور على X مصنفاً للكبار من أصل Y — غير معروف: Z» مع ثلاثة أزرار: **نقل** / **نسخ** / **لاحقاً** (يحفظ في مخزن قيد الانتظار).
+- Main Process يرسل أحداثاً دفعية (push) للـ Renderer: `log`, `status` (phase), `stats`, `decision`, `scan-source`, `scan-complete`, `complete`. الـ Renderer يحدّث فقط. هذا يضمن عدم التجميد.
 - اتجاه RTL: `dir="rtl" lang="ar"` للجذر، نصوص عربية أساساً مع أخطاء/مصطلحات تقنية بالإنجليزية عند الحاجة.
-- **حالة التشغيل** (Status Machine): جاهز ← جاري التحضير ← جاري فحص المصادر ← جاري تحليل الاسم ← جاري البحث في TMDB ← جاري النقل ← جارٍ الإيقاف ← تم الإيقاف ← اكتملت العملية.
+- **حالة التشغيل** (Status Machine): جاهز ← تحضير ← فحص المصادر ← تحليل الاسم ← البحث في TMDB ← **انتهى الفحص — بانتظار القرار** (`scan-complete`) ← نقل المحتوى / نسخ المحتوى ← إيقاف آمن ← متوقف / مكتمل / متوقف (خطأ حرج).
 - **إغلاق أثناء التشغيل** (البند 37): حوار تحذيري «هناك عملية قيد التشغيل… هل تريد الإيقاف الآمن ثم الإغلاق؟» نعم → Stop ثم انتظار Worker عبر Promise دون تجميد ثم إغلاق. لا → يبقى مفتوحاً.
 
 ---
@@ -212,7 +224,8 @@ adult_mover/
 - **Renderer منفصل** (Chromium) عن ذلك تماماً، لذلك يبقى التحرك/التحديث مرناً دائماً.
 - معالجة المجلدات **متسلسلة لا متوازية** (قرار هندسي): ترتيب واضح للـ Log، ضغط على Limiter TMDB، سلوك توقع أسهل، وإيقاف آمن أبسط. الاتصالات الفردية داخل نقلة الملف الكبيرة غير الحاجبة لا تمنع الاستجابة.
 - أحداث التقدم تُدفع للواجهة عبر `webContents.send`.
-- تكرارات كبيرة الملفات: النسخ عبر Streams مع تحديث تقدم غير حاجب.
+- **مرحلتان منفصلتان (0.2.x)**: الفحص والتصنيف (`runScanPhase`) يعمل بلا أي عملية قرص، ثم تنفيذ القرار (`runExecutePhase`) يُشغَّل منفصلاً — فأي منهما قابل لإيقاف آمن مستقل، والإحصاءات تُعاد لكل مرحلة.
+- النسخ عبر `fs.promises.cp` (Recursive Copy) — غير حاجب — يليه تحقق من الحجم الكلي (`verifyCopy`).
 
 ---
 
@@ -349,3 +362,67 @@ adult_mover/
 - النتائج (ON/OFF) موثقة في اختبارات `tests/scanner.test.ts` وبحث TMDB حقيقي
   في السيناريوهات المعبأة (4 مرشّحين ON / 3 OFF لبنية نموذجية مع سلسلتين
   ومواسمهما).
+
+---
+
+## 16. سير العمل الحالي — الفحص أولاً (Scan-First) منذ 0.2.0
+
+المبدأ: **الفحص والتصنيف لا يمسان القرص إطلاقاً**؛ مَن يمس القرص هو مرحلة
+تنفيذ مستقل بعد قرار صريح من المستخدم.
+
+### المرحلة (أ) — الفحص والتصنيف `runScanPhase`
+1. فحص المصادر عبر `scanSource` (مع `folderMap: folder → source`).
+2. لكل مجلد: `parseMediaName` ← `getMediaRating` (TV ثم Movie) ←
+   `determineDecision` سريعاً **بلا أي نقل**.
+3. المخرجات ثلاث فئات:
+   - **Known Adult** → تُعرض للقرار (نقل/نسخ/لاحقاً) — لا تنفيذ تلقائي.
+   - **Unknown** (بلا عنوان/بلا تصنيف/ثقة منخفضة/خطأ TMDB/مصدر مفقود) → تُرسل
+     إلى `unknownStore` تلقائياً وعُرض في تبويب «غير المعروف».
+   - **Skipped Non-Adult** (تصنيف خارج القائمة المستهدفة / موجود بالوجهة).
+4. الحدث `scan-complete` يحمل `ScanSummary` + `knownAdult[]` + `unknown[]`.
+
+### المرحلة (ب) — التنفيذ `runExecutePhase` (بعد قرار المستخدم)
+- **move**: `fs.rename` (Same-Volume). Cross-Volume (EXDEV) ← رفض تلقائي
+  بلا Copy+Delete.
+- **copy**: `fs.promises.cp` (يعمل بين الأقراص) + `verifyCopy` (مقارنة الحجم)
+  + تسجيل نتيجة في `copiedStore` (مع التحقق الأمني قبل حذف النسخة: المسار
+  داخل الوجهة المعلمة فقط).
+- الناجح يُزال من `pendingStore`. **المصدر لا يُحذف في وضع النسخ أبداً.**
+
+### «لاحقاً» وحالة قيد الانتظار
+- زر «لاحقاً» أو عدم الفعل بعد الفحص: `saveAsPending` يكتب `knownAdult` إلى
+  `pending.json` → تبويب «قيد الانتظار» مع أزرار نقل/نسخ لكل عنصر أو للكل،
+  وبقاء قابلاً للتنفيذ في أي جلسة لاحقة.
+- توافق: إن ضغط المستخدم «نقل/نسخ» فوراً بعد الفحص دون حفظ، يُستخدم
+  `lastScanResult.knownAdult` مباشرة (fallback) ثم تُصفر النتيجة لعمّ الإعادة.
+
+### قنوات IPC (قائمة بيضاء واحدة لكل معنى — `IpcChannels`)
+`app:probe` · `settings:get` · `settings:save` · `dialog:pickFolder` ·
+`job:start` (legacy) · `job:stop` · `job:event` ·
+`scan:start` · `scan:summary` ·
+`unknown:list` · `unknown:clearOne` · `unknown:clearAll` ·
+`pending:list` · `pending:saveAll` · `pending:execute(move|copy, ids?)` ·
+`pending:clearOne` · `pending:clearAll` ·
+`copied:list` · `copied:deleteOne` · `copied:deleteAll`.
+
+### ملاحظات الأمان المعاصرة
+- كل معالج IPC يتحقق أن المتصل `file://` (`isTrustedSender`) ويرفض UUID غير
+  صالح — وكل الأوامر تُمرَّر عبر `JobController.running` لمنع التشغيل المتوازي.
+- `deleteCopied` يرفض أي مسار خارج الوجهة المعروفة (`isPathInside`).
+- التصحيح في 0.2.2/0.2.3: رسالة إيقاف المستخدم تظهر «متوقف» وليس «خطأ حرج»،
+  وتحويل أخطاء النسخ (EACCES/EPERM/ENOENT/ENAMETOOLONG/ENOSPC) لرسائل عربية
+  موجهة للسبب الحقيقي.
+
+---
+
+## 17. قنوات الاتصال وأحداث الواجهة (خلاصة)
+
+| قناة/IPC | الاستخدام |
+|---|---|
+| `job:event` | دفع أحداث: `log` / `phase` / `stats` / `decision` / `scan-source` / `scan-complete` / `complete` |
+| `scan:start` → `runScanPhase` | الفحص والتصنيف فقط (لا قرص) |
+| `pending:execute` | تشغيل `runExecutePhase` بنمط move/copy على ids محددة أو الكل |
+| `unknown:*` / `pending:*` / `copied:*` | CRUD على المخازن الدائمة الثلاثة |
+
+الحالة الكاملة معروضة في `source/renderer/index.html` (تبويبات + مودال نتيجة
+الفحص) ومنطقها في `source/renderer/renderer.ts`.
