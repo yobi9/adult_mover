@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": false,
+    "types": [],
+    "rootDir": "source",
+    "outDir": ".build-tmp/renderer-esm",
+    "declaration": false
+  },
+  "include": ["source/renderer/**/*.ts"],
+  "exclude": []
+}

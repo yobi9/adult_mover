@@ -1,0 +1,165 @@
+/**
+ * النقل الآمن لمجلد (البند 10/11/34/35/36).
+ *
+ * القواعد الإلزامية:
+ * - لا استبدال مجلد موجود (تسمية فريدة _1, _2 ...).
+ * - لا حذف أو إزالة المصدر كجزء من سير العمل.
+ * - Same-Volume فقط عبر rename؛ Cross-Volume (EXDEV) → رفض تلقائي (لا Copy+Delete).
+ * - فشل أي خطوة → إبقاء المصدر كما هو.
+ */
+
+import { promises as fsp } from "node:fs";
+import path from "node:path";
+import { isUnsafeSourceDestination } from "./path-guard";
+
+/** أسباب رفض النقل. */
+export type MoveFailReason =
+  | "source-missing"
+  | "source-not-dir"
+  | "destination-unavailable"
+  | "unsafe-paths"
+  | "cross-volume"
+  | "io-error"
+  | "aborted";
+
+/** نتيجة محاولة النقل. */
+export type MoveOutcome =
+  | { ok: true; movedTo: string }
+  | { ok: false; reason: MoveFailReason; detail?: string };
+
+/** خيارات النقل (قابلة للحقن للاختبار). */
+export interface MoveFolderOptions {
+  /** دالة rename (افتراضياً fs.promises.rename). */
+  rename?: (source: string, destination: string) => Promise<void>;
+  /** يُستدعى للتحقق من طلب الإيقاف قبل بدء النقل. */
+  isStopping?: () => boolean;
+}
+
+/** هل يوجد مسار؟ */
+export async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fsp.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** هل المسار مجلد؟ */
+export async function isDirectory(target: string): Promise<boolean> {
+  try {
+    return (await fsp.stat(target)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * إنشاء مجلد الوجهة تلقائياً إذا كانت الوجهة صالحة ولا وجود لها (البند 4).
+ * @param dir مسار الوجهة.
+ */
+export async function ensureDirectoryExists(dir: string): Promise<void> {
+  await fsp.mkdir(dir, { recursive: true });
+}
+
+/**
+ * توليد مسار وجهة فريد: `Name`, `Name_1`, `Name_2` ...
+ * لا يستبدل أبداً مساراً موجوداً.
+ * @param destination مجلد الوجهة.
+ * @param name الاسم المطلوب.
+ * @returns المسار الفريد الجاهز.
+ */
+export async function uniqueTargetPath(destination: string, name: string): Promise<string> {
+  const base = path.join(destination, name);
+  if (!(await pathExists(base))) {
+    return base;
+  }
+  for (let i = 1; i < 1000; i++) {
+    const candidate = path.join(destination, `${name}_${i}`);
+    if (!(await pathExists(candidate))) {
+      return candidate;
+    }
+  }
+  throw new Error("نطاق التسمية الفريدة استُنفد للاسم المطلوب.");
+}
+
+/** هل الخطأ يشير إلى عبور بين مجلدات مختلفة (EXDEV)؟ */
+function isCrossDeviceError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "EXDEV";
+}
+
+/** استخراج رسالة خطأ آمنة. */
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+/**
+ * نقل مجلد كامل بأمان.
+ * @param source مسار مجلد المصدر.
+ * @param destination مجلد الوجهة.
+ * @param name اسم الوجهة (المجلد النهائي داخل الوجهة).
+ * @param options خيارات الحقن.
+ * @returns نتيجة النقل.
+ */
+export async function moveFolder(
+  source: string,
+  destination: string,
+  name: string,
+  options: MoveFolderOptions = {}
+): Promise<MoveOutcome> {
+  const isStopping = options.isStopping ?? (() => false);
+
+  if (isStopping()) {
+    return { ok: false, reason: "aborted", detail: "تم طلب الإيقاف قبل بدء النقل." };
+  }
+
+  if (!(await pathExists(source))) {
+    return { ok: false, reason: "source-missing", detail: source };
+  }
+  if (!(await isDirectory(source))) {
+    return { ok: false, reason: "source-not-dir", detail: source };
+  }
+
+  try {
+    await ensureDirectoryExists(destination);
+  } catch (error) {
+    return { ok: false, reason: "destination-unavailable", detail: errorMessage(error) };
+  }
+
+  if (isUnsafeSourceDestination(source, destination)) {
+    return { ok: false, reason: "unsafe-paths", detail: `${source} ↔ ${destination}` };
+  }
+
+  let target: string;
+  try {
+    target = await uniqueTargetPath(destination, name);
+  } catch (error) {
+    return { ok: false, reason: "io-error", detail: errorMessage(error) };
+  }
+
+  if (isStopping()) {
+    return { ok: false, reason: "aborted", detail: "تم طلب الإيقاف قبل بدء النقل." };
+  }
+
+  const rename = options.rename ?? fsp.rename;
+  try {
+    await rename(source, target);
+    return { ok: true, movedTo: target };
+  } catch (error) {
+    if (isCrossDeviceError(error)) {
+      return {
+        ok: false,
+        reason: "cross-volume",
+        detail: "النقل بين مجلدات مختلفة يتطلب تأكيداً صريحاً ولا يُنفَّذ تلقائياً.",
+      };
+    }
+    return {
+      ok: false,
+      reason: "io-error",
+      detail: `${errorMessage(error)} → ${target}`,
+    };
+  }
+}

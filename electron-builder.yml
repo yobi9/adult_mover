@@ -1,0 +1,29 @@
+appId: com.anomalyco.adultmediamover
+productName: Adult Media Mover
+directories:
+  output: dist-release
+  buildResources: assets
+files:
+  - dist/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Adult Media Mover
+portable:
+  artifactName: AdultMediaMover-Portable-${version}.exe
+electronLanguages:
+  - ar
+  - en

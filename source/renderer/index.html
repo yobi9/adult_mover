@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adult Media Mover</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <h1 id="brand-name">Adult Media Mover</h1>
+        <span class="subtitle">ناقل الأفلام والمسلسلات للكبار فقط</span>
+      </div>
+      <div class="topbar-status">
+        <div id="job-badge" class="badge" data-state="idle">جاهز</div>
+        <span id="job-phase-label" class="phase-label muted">—</span>
+      </div>
+    </header>
+
+    <main class="shell">
+      <!-- المصادر -->
+      <section class="card">
+        <div class="card-head">
+          <h2>مجلدات المصادر</h2>
+          <button id="add-source-btn" class="btn primary small" type="button">+ إضافة مصدر</button>
+        </div>
+        <ul id="sources-list" class="sources-list"></ul>
+        <p id="sources-empty" class="muted small">لا توجد مصادر بعد — أضف مجلداً يحتوي أفلاماً أو مسلسلات.</p>
+      </section>
+
+      <!-- الإعدادات -->
+      <section class="grid-cols">
+        <div class="card">
+          <div class="card-head">
+            <h2>مجلد الوجهة</h2>
+          </div>
+          <div class="row">
+            <input id="destination-input" type="text" placeholder="مثال: D:\Adult" autocomplete="off" spellcheck="false" />
+            <button id="pick-destination-btn" class="btn" type="button">استعراض…</button>
+          </div>
+          <label class="check-row">
+            <input id="recursive-check" type="checkbox" checked />
+            <span>فحص متكرر داخل مجلدات المصادر (يُعامل كل مجلد يحتوي فيديو كنقطة محتوى)</span>
+          </label>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>مفتاح TMDB API</h2>
+            <a
+              class="muted small"
+              href="https://www.themoviedb.org/settings/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              >الحصول على مفتاح</a
+            >
+          </div>
+          <div class="row">
+            <input id="api-key-input" type="password" placeholder="أدخل مفتاح TMDB API" autocomplete="off" spellcheck="false" />
+            <button id="toggle-key-btn" class="btn" type="button">إظهار</button>
+          </div>
+          <label class="check-row">
+            <input id="keep-key-check" type="checkbox" />
+            <span>حفظ المفتاح على هذا الجهاز (اختياري — بخلافه يُحفظ في الذاكرة فقط)</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- التحكم -->
+      <section class="card actions-card">
+        <button id="start-btn" class="btn primary big" type="button">ابدأ الفحص والنقل</button>
+        <button id="stop-btn" class="btn danger big" type="button" disabled>إيقاف</button>
+        <div id="start-error" class="error-text"></div>
+      </section>
+
+      <!-- الإحصائيات -->
+      <section class="card stats-card">
+        <div class="stat"><span class="stat-value" id="stat-processed">0</span><span class="stat-label">تمت معالجتها</span></div>
+        <div class="stat"><span class="stat-value" id="stat-moved">0</span><span class="stat-label">نُقلت</span></div>
+        <div class="stat"><span class="stat-value" id="stat-skipped">0</span><span class="stat-label">تجاوزت</span></div>
+        <div class="stat"><span class="stat-value" id="stat-errors">0</span><span class="stat-label">أخطاء</span></div>
+      </section>
+
+      <!-- السجل -->
+      <section class="card">
+        <div class="card-head">
+          <h2>سجل العمليات</h2>
+          <button id="clear-log-btn" class="btn small" type="button">مسح</button>
+        </div>
+        <div id="log-area" class="log-area" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="footer muted small">
+      <span>Adult Media Mover</span>
+      <span id="app-version"></span>
+    </footer>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

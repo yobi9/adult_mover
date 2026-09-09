@@ -1,0 +1,32 @@
+{
+  "name": "adult-media-mover",
+  "version": "0.1.0",
+  "description": "ناقل الأفلام والمسلسلات للكبار فقط - Adult Media Mover",
+  "main": "dist/main/main.js",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"['dist','dist-test','.build-tmp'].forEach(d=>require('fs').rmSync(d,{recursive:true,force:true}))\"",
+    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-assets.mjs",
+    "start": "npm run build && electron .",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "smoke": "npm run build && cross-env SMOKE_TEST=1 electron .",
+    "icons": "node scripts/make-icon.mjs",
+    "seed:test": "node scripts/seed-test-data.mjs",
+    "dist": "npm run build && electron-builder --win nsis portable",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "cross-env": "^7.0.3",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "tsx": "^4.23.13",
+    "typescript": "~5.9.3"
+  }
+}

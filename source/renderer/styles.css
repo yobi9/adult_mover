@@ -1,0 +1,366 @@
+/* ============ أساس ============ */
+:root {
+  --bg: #111827;
+  --panel: #1f2937;
+  --panel-2: #111c2e;
+  --line: #374151;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --accent: #f59e0b;
+  --accent-2: #d97706;
+  --ok: #34d399;
+  --err: #f87171;
+  --warn: #fbbf24;
+  --info: #60a5fa;
+  --radius: 10px;
+  --font: "Segoe UI", "Tahoma", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============ شريط علوي ============ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.badge[data-state="idle"] {
+  color: var(--muted);
+}
+.badge[data-state="running"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.badge[data-state="complete"] {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.badge[data-state="stopped"] {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.badge[data-state="error"] {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+/* ============ تخطيط ============ */
+.shell {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px 22px 28px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.grid-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ============ عناصر ============ */
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+input[type="text"],
+input[type="password"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.check-row input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #111827;
+  font-weight: 700;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.btn.danger {
+  background: transparent;
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.btn.small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn.big {
+  padding: 12px 22px;
+  font-size: 15px;
+}
+
+/* ============ المصادر ============ */
+.sources-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sources-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  direction: ltr;
+  text-align: left;
+}
+
+.sources-list li button {
+  background: transparent;
+  border: none;
+  color: var(--err);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.sources-list li button:hover {
+  background: rgba(248, 113, 113, 0.15);
+}
+
+/* ============ أزرار التحكم ============ */
+.actions-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.error-text {
+  flex-basis: 100%;
+  color: var(--err);
+  font-size: 13px;
+  min-height: 18px;
+}
+
+/* ============ الإحصائيات ============ */
+.stats-card {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .stats-card {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat-value {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ============ السجل ============ */
+.log-area {
+  max-height: 300px;
+  overflow-y: auto;
+  background: #0b1220;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: "Consolas", "Courier New", monospace;
+  direction: ltr;
+  text-align: left;
+}
+
+.log-line {
+  padding: 2px 0;
+  border-bottom: 1px solid #16213a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-line .time {
+  color: var(--muted);
+}
+
+.log-line.level-info .msg {
+  color: var(--info);
+}
+.log-line.level-warn .msg {
+  color: var(--warn);
+}
+.log-line.level-error .msg {
+  color: var(--err);
+}
+
+/* ============ متنوع ============ */
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 22px 16px;
+  border-top: 1px solid var(--line);
+}
